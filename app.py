@@ -33,31 +33,33 @@ amount = st.number_input("Amount", min_value=0.0, step=1.0, key="amount_input")
 save_button = st.button("Add Expense", type="primary", use_container_width=True)
 
 # --- SAVING LOGIC ---
-if save_button or (amount > 0 and st.session_state.amount_input):
-    try:
-        new_entry = pd.DataFrame([{
-            "Date": date.strftime('%Y-%m-%d'),
-            "Category": category,
-            "Amount": amount
-        }])
-        
-        # Combine current data with new entry
-        updated_df = pd.concat([df, new_entry], ignore_index=True)
-        
-        # Write back to Google
-        conn.update(worksheet="Sheet1", data=updated_df)
-        
-        st.success(f"Saved ₹{amount}!")
-        
-        # IMPORTANT: Clear the cache so the NEXT run fetches the new total
-        st.cache_data.clear()
-        st.rerun()
-        
-    except Exception as e:
-        if "429" in str(e):
-            st.error("Google is tired! Wait 60 seconds and try again. (Quota Limit)")
-        else:
+# --- IMPROVED SAVING LOGIC ---
+if save_button:
+    if amount > 0:
+        try:
+            new_entry = pd.DataFrame([{
+                "Date": date.strftime('%Y-%m-%d'),
+                "Category": category,
+                "Amount": amount
+            }])
+            
+            # Use a fresh read to ensure we don't duplicate old data
+            current_df = conn.read(worksheet="Sheet1", usecols=[0, 1, 2]).dropna(how="all")
+            updated_df = pd.concat([current_df, new_entry], ignore_index=True)
+            
+            conn.update(worksheet="Sheet1", data=updated_df)
+            
+            st.success(f"Saved ₹{amount}!")
+            st.balloons()
+            
+            # Clear the cache and reset the amount by rerunning
+            st.cache_data.clear()
+            st.rerun()
+            
+        except Exception as e:
             st.error(f"Error: {e}")
+    else:
+        st.warning("Please enter an amount greater than 0.")
 
 # --- SUMMARY SECTION ---
 st.divider()
@@ -74,3 +76,4 @@ if not df.empty:
     
     st.progress(food_sum / total if total > 0 else 0, text=f"Food: ₹{food_sum}")
     st.progress(travel_sum / total if total > 0 else 0, text=f"Travel: ₹{travel_sum}")
+
